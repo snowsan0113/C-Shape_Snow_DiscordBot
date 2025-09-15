@@ -1,4 +1,5 @@
-﻿using Discord;
+﻿using ConsoleApp2;
+using Discord;
 using Discord.Commands;
 using Discord.Interactions;
 using Discord.Net;
@@ -11,17 +12,38 @@ using System.Reflection;
 using System.Threading.Tasks;
 
 class Program {
-    const string token = "";
+    static string bot_token;
 
-    private static DiscordSocketClient _client;
+    private static DiscordSocketClient client;
 
     public static async Task Main(){
-        _client = new DiscordSocketClient();
-        _client.Log += Log;
+        bot_token = ConfigManager.GetConfig().DiscordToken;
 
-        await _client.LoginAsync(TokenType.Bot, token);
-        await _client.StartAsync();
-        _client.Ready += Client_ReadyAsync;
+        client = new DiscordSocketClient();
+        client.Log += Log;
+        ConfigManager.CreateConfig();
+
+        await client.LoginAsync(TokenType.Bot, bot_token);
+        await client.StartAsync();
+
+        var globalCommand = new SlashCommandBuilder();
+        globalCommand.WithName("guild_info");
+        globalCommand.WithDescription("サーバーの情報取得するコマンド");
+
+        client.Ready += async () =>
+        {
+            try
+            {
+                client.SlashCommandExecuted += SlashCommandHandler;
+                await client.CreateGlobalApplicationCommandAsync(globalCommand.Build());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("エラーが発生しました:" + ex.Message);
+                Environment.Exit(-1);
+            }
+        };
+
         await Task.Delay(-1);
     }
 
@@ -30,35 +52,15 @@ class Program {
         return Task.CompletedTask;
     }
 
-    private static async Task Client_ReadyAsync() {
-        // guild(サーバー)用のコマンド
-        var guild = _client.GetGuild(1376102932860244029);
-        _client.SlashCommandExecuted += SlashCommandHandler;
-
-        var commands = await guild.GetApplicationCommandsAsync();
-
-        // globalコマンド
-        var globalCommand = new SlashCommandBuilder();
-        globalCommand.WithName("snowsan_cmd");
-        globalCommand.WithDescription("スノーさんのコマンド");
-
-        // ビルダーからコマンドを構成する
-        try {
-            // guildが不要なのでSocketClientからコールする
-            await _client.CreateGlobalApplicationCommandAsync(globalCommand.Build());
-        }
-        catch (HttpException exception){
-            // エラー
-            var json = JsonConvert.SerializeObject(exception.Errors, Formatting.Indented);
-
-            Console.WriteLine(json);
-        }
-    }
-
     private static async Task SlashCommandHandler(SocketSlashCommand command) {
-        if (command.CommandName.Equals("snowsan_cmd")) {
-            Console.WriteLine(command.CommandName);
-            await command.RespondAsync($"実行できました {command.Data.Name}");
+        if (command.CommandName.Equals("guild_info")) {
+            ulong? guildid = command.GuildId;
+            var guild = client.GetGuild((ulong) guildid);
+            var embed = new EmbedBuilder();
+            embed.Title = "サーバーの情報";
+            embed.AddField("サーバーの名前", guild.Name);
+            var channel = command.Channel;
+            await channel.SendMessageAsync(embed: embed.Build());
         }
         
     }
